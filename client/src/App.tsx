@@ -1,32 +1,67 @@
 import { useState } from "react";
-import { Room, RoomEvent } from "livekit-client";
+import { Room, RoomEvent, RemoteTrack } from "livekit-client";
 
-function App() {
+
+export default function App() {
   const [connected, setConnected] = useState(false);
 
-  async function joinRoom() {
-    const res = await fetch(`${import.meta.env.VITE_TOKEN_ENDPOINT}?room=demo&who=client`);
+
+
+  async function joinRoom(deviceId?: string) {
+    // Generate unique client ID
+    let clientId = sessionStorage.getItem("clientId");
+    if (!clientId) {
+      clientId = `client-${Math.random().toString(36).substring(2, 9)}`;
+      sessionStorage.setItem("clientId", clientId);
+    }
+
+    // Request LiveKit token from orchestrator
+    const u = new URL(import.meta.env.VITE_TOKEN_ENDPOINT);
+    u.searchParams.set("room", "demo");
+    u.searchParams.set("who", clientId);
+    const res = await fetch(u, { cache: "no-store" });
     const { token, ws } = await res.json();
 
-    const room = new Room();
-    await room.connect(ws, token);
+    // Create LiveKit room 
+    const room = new Room({
+      audioCaptureDefaults: {
+        deviceId,
+      },
+    });
+
+    // Listen for incoming audio 
+    room.on(RoomEvent.TrackSubscribed, async (track: RemoteTrack) => {
+      if (track.kind === "audio") {
+        const audio = track.attach() as HTMLAudioElement;
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+      }
+    });
+
+    // Connect and enable microphone
+    await room.connect(ws, token, { autoSubscribe: true });
+    await room.startAudio();
+    await room.localParticipant.setMicrophoneEnabled(true, { deviceId });
+    
+    console.log("[client] Connected as:", clientId);
     setConnected(true);
-
-    room.on(RoomEvent.ConnectionStateChanged, (state) =>
-      console.log("Room state:", state)
-    );
-
-    await room.localParticipant.enableCameraAndMicrophone();
   }
 
+
+
   return (
-    <div style={{ padding: 40 }}>
-      <h2>Continuity Presence – Client</h2>
-      <button onClick={joinRoom} disabled={connected}>
-        {connected ? "Connected" : "Join Room"}
-      </button>
+    <div style={{ padding: 24 }}>
+      <h2>Continuity Presence — Client</h2>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button
+          disabled={connected}
+          onClick={() => {
+            const sel = document.getElementById("mic") as HTMLSelectElement;
+            joinRoom(sel?.value || undefined);
+          }}>
+          {connected ? " Connected" : "Join Room"}
+        </button>
+      </div>
     </div>
   );
 }
-
-export default App;

@@ -6,7 +6,7 @@ export async function issueToken({
     apiSecret,
     roomName,
     identity,
-    ttlSeconds = 1800,
+    ttlSeconds = 300,
     canPublish = true,
     canSubscribe = true,
   }: {
@@ -18,10 +18,7 @@ export async function issueToken({
     canPublish?: boolean;
     canSubscribe?: boolean;
   }) {
-    const at = new AccessToken(apiKey, apiSecret);
-    at.identity = identity;
-    at.ttl = Math.floor(Date.now() / 1000) + ttlSeconds;
-
+    const at = new AccessToken(apiKey, apiSecret, {identity, ttl: ttlSeconds});
   
     const grant: VideoGrant = {
       roomJoin: true,
